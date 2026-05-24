@@ -1,0 +1,1 @@
+[{"key":"preset","name":"Preset","type":"int","min":0,"max":0},{"key":"octave_transpose","name":"Octave","type":"int","min":-3,"max":3}]

@@ -1,0 +1,32 @@
+{
+  "id": "amy",
+  "name": "Amy",
+  "abbrev": "AMY",
+  "version": "1.0",
+  "description": "AMY Music Synthesizer Engine",
+  "author": "Brian Whitman (port: antigravity)",
+  "license": "MIT",
+  "ui": "ui.js",
+  "dsp": "dsp.so",
+  "api_version": 2,
+  "capabilities": {
+    "audio_out": true,
+    "audio_in": false,
+    "midi_in": true,
+    "midi_out": false,
+    "aftertouch": true,
+    "chainable": true,
+    "component_type": "sound_generator",
+    "default_forward_channel": -1,
+    "chain_params": [
+      {
+        "key": "preset",
+        "name": "Preset",
+        "type": "int",
+        "min": 0,
+        "max": 0,
+        "default": 0
+      }
+    ]
+  }
+}

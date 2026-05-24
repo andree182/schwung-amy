@@ -1,0 +1,47 @@
+{
+  "title": "AMY",
+  "children": [
+    {
+      "title": "Overview",
+      "lines": [
+        "AMY polyphonic",
+        "synthesizer engine.",
+        "",
+        "Supports multiple",
+        "synthesis types:",
+        " Subtractive",
+        " FM Synthesis",
+        " Karplus-Strong",
+        " PCM Wave samples",
+        " Additive/Partials",
+        "",
+        "Fast, low-latency",
+        "fixed-point engine."
+      ]
+    },
+    {
+      "title": "Controls",
+      "children": [
+        {
+          "title": "Knob Mapping",
+          "lines": [
+            "Preset",
+            " Select active preset",
+            "",
+            "Octave",
+            " Octave transpose",
+            " (-3 to +3 octaves)"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Settings",
+      "lines": [
+        "Global parameters:",
+        " Preset",
+        " Octave Transpose"
+      ]
+    }
+  ]
+}

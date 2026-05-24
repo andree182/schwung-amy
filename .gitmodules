@@ -1,0 +1,4 @@
+[submodule "src/dsp/amy"]
+	path = src/dsp/amy
+	url = https://github.com/shorepine/amy
+
