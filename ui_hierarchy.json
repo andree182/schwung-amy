@@ -1,1 +1,49 @@
-{"modes":null,"levels":{"root":{"list_param":"preset","count_param":"preset_count","name_param":"preset_name","children":"main","knobs":[],"params":[]},"main":{"children":null,"knobs":[],"params":[]}}}
+{
+  "modes": null,
+  "levels": {
+    "root": {
+      "list_param": "preset",
+      "count_param": "preset_count",
+      "name_param": "preset_name",
+      "children": "main",
+      "knobs": ["cutoff", "resonance", "volume", "reverb", "chorus", "echo"],
+      "params": [
+        {"level": "category_jump", "label": "Jump to Category"}
+      ]
+    },
+    "main": {
+      "children": null,
+      "knobs": ["cutoff", "resonance", "volume", "reverb", "chorus", "echo"],
+      "params": [
+        {"level": "category_jump", "label": "Jump to Category"},
+        {"level": "filter", "label": "Filter"},
+        {"level": "effects", "label": "Effects"},
+        {"level": "eq", "label": "EQ"}
+      ]
+    },
+    "category_jump": {
+      "label": "Jump to Category",
+      "items_param": "category_list",
+      "select_param": "jump_to_category",
+      "navigate_to": "root",
+      "children": null,
+      "knobs": [],
+      "params": []
+    },
+    "filter": {
+      "children": null,
+      "knobs": ["filter_type", "cutoff", "resonance"],
+      "params": ["filter_type", "cutoff", "resonance"]
+    },
+    "effects": {
+      "children": null,
+      "knobs": ["reverb", "chorus", "echo", "echo_delay", "echo_feedback"],
+      "params": ["reverb", "chorus", "echo", "echo_delay", "echo_feedback"]
+    },
+    "eq": {
+      "children": null,
+      "knobs": ["eq_l", "eq_m", "eq_h"],
+      "params": ["eq_l", "eq_m", "eq_h"]
+    }
+  }
+}

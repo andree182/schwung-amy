@@ -56,6 +56,27 @@ extern "C" {
 /* Preset Names */
 #include "preset_names.h"
 
+struct category_entry {
+  const char name[64];
+  int first_idx;
+};
+
+static const category_entry AMY_CATEGORIES[] = {
+  { "Juno Bank A", 0 },
+  { "Juno Bank B", 64 },
+  { "DX7 Brass & Winds", 128 },
+  { "DX7 Strings & Choir", 131 },
+  { "DX7 Pianos & Keys", 135 },
+  { "DX7 Guitars & Basses", 139 },
+  { "DX7 Organs & Pipes", 144 },
+  { "DX7 Bells & Percussion", 148 },
+  { "DX7 Synth Leads", 224 },
+  { "DX7 Synth Pads & FX", 240 },
+  { "Other (Piano/Init)", 256 }
+};
+static const int AMY_CATEGORY_COUNT = sizeof(AMY_CATEGORIES) / sizeof(AMY_CATEGORIES[0]);
+
+
 /* Host API reference */
 static const host_api_v1_t *g_host = nullptr;
 
@@ -94,6 +115,20 @@ typedef struct amy_instance_t {
   float output_gain;
   char preset_name[64];
 
+  /* Parameters */
+  float filter_freq;
+  float resonance;
+  int filter_type;
+  float volume;
+  float reverb_level;
+  float chorus_level;
+  float echo_level;
+  float echo_delay_ms;
+  float echo_feedback;
+  float eq_l;
+  float eq_m;
+  float eq_h;
+
   /* Pre-built JSON strings */
   char *ui_hierarchy_json;
   char *chain_params_json;
@@ -116,6 +151,19 @@ typedef struct amy_instance_t {
     ui_hierarchy_json = nullptr;
     chain_params_json = nullptr;
 
+    filter_freq = 8000.0f;
+    resonance = 0.707f;
+    filter_type = 0;
+    volume = 0.5f;
+    reverb_level = 0.0f;
+    chorus_level = 0.0f;
+    echo_level = 0.0f;
+    echo_delay_ms = 500.0f;
+    echo_feedback = 0.5f;
+    eq_l = 0.0f;
+    eq_m = 0.0f;
+    eq_h = 0.0f;
+
     for (int i = 0; i < 16; i++) {
       voices[i].midi_note = -1;
       voices[i].last_used = 0;
@@ -123,6 +171,7 @@ typedef struct amy_instance_t {
     note_counter = 0;
   }
 } amy_instance_t;
+
 
 /* =====================================================================
  * Voice Configuration helper
@@ -153,6 +202,37 @@ static void load_patch_for_voices(amy_instance_t *inst, int patch_number) {
   }
   amy_add_event(&e);
   amy_execute_deltas();
+}
+
+extern "C" {
+extern struct synthinfo** synth;
+extern uint16_t *voice_to_base_osc;
+}
+
+static void sync_params_from_engine(amy_instance_t *inst) {
+  if (voice_to_base_osc && synth) {
+    uint16_t base_osc = voice_to_base_osc[0];
+    if (base_osc < AMY_OSCS && synth[base_osc]) {
+      inst->filter_freq = freq_of_logfreq(synth[base_osc]->filter_logfreq_coefs[COEF_CONST]);
+      inst->resonance = synth[base_osc]->resonance;
+      inst->filter_type = synth[base_osc]->filter_type;
+    }
+  }
+}
+
+static int json_get_number(const char *json, const char *key, float *out) {
+  if (!json || !key)
+    return -1;
+  char search[64];
+  snprintf(search, sizeof(search), "\"%s\":", key);
+  const char *pos = strstr(json, search);
+  if (!pos)
+    return -1;
+  pos += strlen(search);
+  while (*pos == ' ' || *pos == '\t')
+    pos++;
+  *out = (float)atof(pos);
+  return 0;
 }
 
 /* =====================================================================
@@ -188,13 +268,44 @@ static void *v2_create_instance(const char *module_dir,
           "\"count_param\":\"preset_count\","
           "\"name_param\":\"preset_name\","
           "\"children\":\"main\","
-          "\"knobs\":[],"
-          "\"params\":[]"
+          "\"knobs\":[\"cutoff\",\"resonance\",\"volume\",\"reverb\",\"chorus\",\"echo\"],"
+          "\"params\":["
+            "{\"level\":\"category_jump\",\"label\":\"Jump to Category\"}"
+          "]"
         "},"
         "\"main\":{"
           "\"children\":null,"
+          "\"knobs\":[\"cutoff\",\"resonance\",\"volume\",\"reverb\",\"chorus\",\"echo\"],"
+          "\"params\":["
+            "{\"level\":\"category_jump\",\"label\":\"Jump to Category\"},"
+            "{\"level\":\"filter\",\"label\":\"Filter\"},"
+            "{\"level\":\"effects\",\"label\":\"Effects\"},"
+            "{\"level\":\"eq\",\"label\":\"EQ\"}"
+          "]"
+        "},"
+        "\"category_jump\":{"
+          "\"label\":\"Jump to Category\","
+          "\"items_param\":\"category_list\","
+          "\"select_param\":\"jump_to_category\","
+          "\"navigate_to\":\"root\","
+          "\"children\":null,"
           "\"knobs\":[],"
           "\"params\":[]"
+        "},"
+        "\"filter\":{"
+          "\"children\":null,"
+          "\"knobs\":[\"filter_type\",\"cutoff\",\"resonance\"],"
+          "\"params\":[\"filter_type\",\"cutoff\",\"resonance\"]"
+        "},"
+        "\"effects\":{"
+          "\"children\":null,"
+          "\"knobs\":[\"reverb\",\"chorus\",\"echo\",\"echo_delay\",\"echo_feedback\"],"
+          "\"params\":[\"reverb\",\"chorus\",\"echo\",\"echo_delay\",\"echo_feedback\"]"
+        "},"
+        "\"eq\":{"
+          "\"children\":null,"
+          "\"knobs\":[\"eq_l\",\"eq_m\",\"eq_h\"],"
+          "\"params\":[\"eq_l\",\"eq_m\",\"eq_h\"]"
         "}"
       "}"
     "}"
@@ -203,12 +314,27 @@ static void *v2_create_instance(const char *module_dir,
   inst->chain_params_json = strdup(
     "["
       "{\"key\":\"preset\",\"name\":\"Preset\",\"type\":\"int\",\"min\":0,\"max\":257},"
-      "{\"key\":\"octave_transpose\",\"name\":\"Octave\",\"type\":\"int\",\"min\":-3,\"max\":3}"
+      "{\"key\":\"octave_transpose\",\"name\":\"Octave\",\"type\":\"int\",\"min\":-3,\"max\":3},"
+      "{\"key\":\"cutoff\",\"name\":\"Cutoff\",\"type\":\"float\",\"min\":50,\"max\":15000,\"step\":10},"
+      "{\"key\":\"resonance\",\"name\":\"Resonance\",\"type\":\"float\",\"min\":0.5,\"max\":16.0,\"step\":0.1},"
+      "{\"key\":\"filter_type\",\"name\":\"Filter Type\",\"type\":\"enum\",\"options\":[\"None\",\"Lowpass\",\"Bandpass\",\"Highpass\",\"Lowpass 24dB\"]},"
+      "{\"key\":\"volume\",\"name\":\"Volume\",\"type\":\"float\",\"min\":0.0,\"max\":2.0,\"step\":0.01},"
+      "{\"key\":\"reverb\",\"name\":\"Reverb\",\"type\":\"float\",\"min\":0.0,\"max\":5.0,\"step\":0.05},"
+      "{\"key\":\"chorus\",\"name\":\"Chorus\",\"type\":\"float\",\"min\":0.0,\"max\":5.0,\"step\":0.05},"
+      "{\"key\":\"echo\",\"name\":\"Echo\",\"type\":\"float\",\"min\":0.0,\"max\":5.0,\"step\":0.05},"
+      "{\"key\":\"echo_delay\",\"name\":\"Echo Delay\",\"type\":\"float\",\"min\":10,\"max\":700,\"step\":1},"
+      "{\"key\":\"echo_feedback\",\"name\":\"Echo Feedback\",\"type\":\"float\",\"min\":0.0,\"max\":0.99,\"step\":0.01},"
+      "{\"key\":\"eq_l\",\"name\":\"EQ Low\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
+      "{\"key\":\"eq_m\",\"name\":\"EQ Mid\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
+      "{\"key\":\"eq_h\",\"name\":\"EQ High\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5}"
     "]"
   );
 
+
   // Load default patch 0 for all voices
   load_patch_for_voices(inst, 0);
+  sync_params_from_engine(inst);
+
 
   plugin_log("Instance created successfully.");
   return inst;
@@ -298,12 +424,69 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
   if (!inst)
     return;
 
+  if (strcmp(key, "state") == 0) {
+    float fval;
+
+    /* Restore preset first (sets all engine params to preset values) */
+    if (json_get_number(val, "preset", &fval) == 0) {
+      int patch = (int)fval;
+      if (patch >= 0 && patch < 258) {
+        inst->current_preset = patch;
+        strncpy(inst->preset_name, AMY_PRESET_NAMES[patch], sizeof(inst->preset_name) - 1);
+        load_patch_for_voices(inst, patch);
+      }
+    }
+
+    if (json_get_number(val, "octave_transpose", &fval) == 0) {
+      inst->octave_transpose = (int)fval;
+    }
+
+    if (json_get_number(val, "cutoff", &fval) == 0) {
+      v2_set_param(instance, "cutoff", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "resonance", &fval) == 0) {
+      v2_set_param(instance, "resonance", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "filter_type", &fval) == 0) {
+      v2_set_param(instance, "filter_type", std::to_string((int)fval).c_str());
+    }
+    if (json_get_number(val, "volume", &fval) == 0) {
+      v2_set_param(instance, "volume", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "reverb", &fval) == 0) {
+      v2_set_param(instance, "reverb", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "chorus", &fval) == 0) {
+      v2_set_param(instance, "chorus", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "echo", &fval) == 0) {
+      v2_set_param(instance, "echo", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "echo_delay", &fval) == 0) {
+      v2_set_param(instance, "echo_delay", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "echo_feedback", &fval) == 0) {
+      v2_set_param(instance, "echo_feedback", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "eq_l", &fval) == 0) {
+      v2_set_param(instance, "eq_l", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "eq_m", &fval) == 0) {
+      v2_set_param(instance, "eq_m", std::to_string(fval).c_str());
+    }
+    if (json_get_number(val, "eq_h", &fval) == 0) {
+      v2_set_param(instance, "eq_h", std::to_string(fval).c_str());
+    }
+    return;
+  }
+
   if (strcmp(key, "preset") == 0) {
     int patch = atoi(val);
     if (patch >= 0 && patch < 258) {
       inst->current_preset = patch;
       strncpy(inst->preset_name, AMY_PRESET_NAMES[patch], sizeof(inst->preset_name) - 1);
       load_patch_for_voices(inst, patch);
+      sync_params_from_engine(inst);
     }
   } else if (strcmp(key, "octave_transpose") == 0) {
     inst->octave_transpose = atoi(val);
@@ -318,8 +501,137 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
         amy_add_event(&e);
       }
     }
+  } else if (strcmp(key, "jump_to_category") == 0) {
+    int idx = atoi(val);
+    if (idx >= 0 && idx < AMY_CATEGORY_COUNT) {
+      int patch = AMY_CATEGORIES[idx].first_idx;
+      inst->current_preset = patch;
+      strncpy(inst->preset_name, AMY_PRESET_NAMES[patch], sizeof(inst->preset_name) - 1);
+      load_patch_for_voices(inst, patch);
+      sync_params_from_engine(inst);
+    }
+  } else if (strcmp(key, "cutoff") == 0) {
+    float freq = atof(val);
+    if (freq < 20.0f) freq = 20.0f;
+    if (freq > 20000.0f) freq = 20000.0f;
+    inst->filter_freq = freq;
+
+    amy_event e = amy_default_event();
+    e.synth = 0;
+    e.osc = 0;
+    e.filter_freq_coefs[COEF_CONST] = freq;
+    amy_add_event(&e);
+  } else if (strcmp(key, "resonance") == 0) {
+    float res = atof(val);
+    if (res < 0.5f) res = 0.5f;
+    if (res > 16.0f) res = 16.0f;
+    inst->resonance = res;
+
+    amy_event e = amy_default_event();
+    e.synth = 0;
+    e.osc = 0;
+    e.resonance = res;
+    amy_add_event(&e);
+  } else if (strcmp(key, "filter_type") == 0) {
+    int type = atoi(val);
+    if (type >= 0 && type <= 4) {
+      inst->filter_type = type;
+
+      amy_event e = amy_default_event();
+      e.synth = 0;
+      e.osc = 0;
+      e.filter_type = type;
+      amy_add_event(&e);
+    }
+  } else if (strcmp(key, "volume") == 0) {
+    float vol = atof(val);
+    if (vol < 0.0f) vol = 0.0f;
+    if (vol > 2.0f) vol = 2.0f;
+    inst->volume = vol;
+    inst->output_gain = vol;
+  } else if (strcmp(key, "reverb") == 0) {
+    float level = atof(val);
+    if (level < 0.0f) level = 0.0f;
+    if (level > 5.0f) level = 5.0f;
+    inst->reverb_level = level;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.reverb_level = level;
+    amy_add_event(&e);
+  } else if (strcmp(key, "chorus") == 0) {
+    float level = atof(val);
+    if (level < 0.0f) level = 0.0f;
+    if (level > 5.0f) level = 5.0f;
+    inst->chorus_level = level;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.chorus_level = level;
+    amy_add_event(&e);
+  } else if (strcmp(key, "echo") == 0) {
+    float level = atof(val);
+    if (level < 0.0f) level = 0.0f;
+    if (level > 5.0f) level = 5.0f;
+    inst->echo_level = level;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.echo_level = level;
+    amy_add_event(&e);
+  } else if (strcmp(key, "echo_delay") == 0) {
+    float delay = atof(val);
+    if (delay < 10.0f) delay = 10.0f;
+    if (delay > 700.0f) delay = 700.0f;
+    inst->echo_delay_ms = delay;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.echo_delay_ms = delay;
+    amy_add_event(&e);
+  } else if (strcmp(key, "echo_feedback") == 0) {
+    float fb = atof(val);
+    if (fb < 0.0f) fb = 0.0f;
+    if (fb > 0.99f) fb = 0.99f;
+    inst->echo_feedback = fb;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.echo_feedback = fb;
+    amy_add_event(&e);
+  } else if (strcmp(key, "eq_l") == 0) {
+    float gain = atof(val);
+    if (gain < -15.0f) gain = -15.0f;
+    if (gain > 15.0f) gain = 15.0f;
+    inst->eq_l = gain;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.eq_l = gain;
+    amy_add_event(&e);
+  } else if (strcmp(key, "eq_m") == 0) {
+    float gain = atof(val);
+    if (gain < -15.0f) gain = -15.0f;
+    if (gain > 15.0f) gain = 15.0f;
+    inst->eq_m = gain;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.eq_m = gain;
+    amy_add_event(&e);
+  } else if (strcmp(key, "eq_h") == 0) {
+    float gain = atof(val);
+    if (gain < -15.0f) gain = -15.0f;
+    if (gain > 15.0f) gain = 15.0f;
+    inst->eq_h = gain;
+
+    amy_event e = amy_default_event();
+    e.bus = 0;
+    e.eq_h = gain;
+    amy_add_event(&e);
   }
 }
+
 
 static int v2_get_param(void *instance, const char *key, char *buf,
                         int buf_len) {
@@ -355,12 +667,78 @@ static int v2_get_param(void *instance, const char *key, char *buf,
   }
   if (strcmp(key, "state") == 0) {
     return snprintf(buf, buf_len,
-                    "{\"preset\":%d,\"octave_transpose\":%d}",
-                    inst->current_preset, inst->octave_transpose);
+                    "{\"preset\":%d,\"octave_transpose\":%d"
+                    ",\"cutoff\":%f,\"resonance\":%f,\"filter_type\":%d"
+                    ",\"volume\":%f,\"reverb\":%f,\"chorus\":%f,\"echo\":%f"
+                    ",\"echo_delay\":%f,\"echo_feedback\":%f"
+                    ",\"eq_l\":%f,\"eq_m\":%f,\"eq_h\":%f}",
+                    inst->current_preset, inst->octave_transpose,
+                    inst->filter_freq, inst->resonance, inst->filter_type,
+                    inst->volume, inst->reverb_level, inst->chorus_level, inst->echo_level,
+                    inst->echo_delay_ms, inst->echo_feedback,
+                    inst->eq_l, inst->eq_m, inst->eq_h);
+  }
+  if (strcmp(key, "cutoff") == 0)
+    return snprintf(buf, buf_len, "%f", inst->filter_freq);
+  if (strcmp(key, "resonance") == 0)
+    return snprintf(buf, buf_len, "%f", inst->resonance);
+  if (strcmp(key, "filter_type") == 0)
+    return snprintf(buf, buf_len, "%d", inst->filter_type);
+  if (strcmp(key, "volume") == 0)
+    return snprintf(buf, buf_len, "%f", inst->volume);
+  if (strcmp(key, "reverb") == 0)
+    return snprintf(buf, buf_len, "%f", inst->reverb_level);
+  if (strcmp(key, "chorus") == 0)
+    return snprintf(buf, buf_len, "%f", inst->chorus_level);
+  if (strcmp(key, "echo") == 0)
+    return snprintf(buf, buf_len, "%f", inst->echo_level);
+  if (strcmp(key, "echo_delay") == 0)
+    return snprintf(buf, buf_len, "%f", inst->echo_delay_ms);
+  if (strcmp(key, "echo_feedback") == 0)
+    return snprintf(buf, buf_len, "%f", inst->echo_feedback);
+  if (strcmp(key, "eq_l") == 0)
+    return snprintf(buf, buf_len, "%f", inst->eq_l);
+  if (strcmp(key, "eq_m") == 0)
+    return snprintf(buf, buf_len, "%f", inst->eq_m);
+  if (strcmp(key, "eq_h") == 0)
+    return snprintf(buf, buf_len, "%f", inst->eq_h);
+
+  if (strcmp(key, "category_list") == 0) {
+    std::string json = "[";
+    for (int i = 0; i < AMY_CATEGORY_COUNT; i++) {
+      if (i > 0)
+        json += ",";
+      json += "{\"index\":" + std::to_string(i) + ",\"label\":\"";
+      for (const char *p = AMY_CATEGORIES[i].name; *p; p++) {
+        if (*p == '"' || *p == '\\') {
+          json += '\\';
+        }
+        json += *p;
+      }
+      json += "\"}";
+    }
+    json += "]";
+    int len = (int)json.size();
+    if (len < buf_len) {
+      strcpy(buf, json.c_str());
+      return len;
+    }
+    return -1;
+  }
+
+  if (strcmp(key, "bank_name") == 0) {
+    const char *cat_name = "Factory Presets";
+    for (int i = 0; i < AMY_CATEGORY_COUNT; i++) {
+      if (inst->current_preset >= AMY_CATEGORIES[i].first_idx) {
+        cat_name = AMY_CATEGORIES[i].name;
+      }
+    }
+    return snprintf(buf, buf_len, "%s", cat_name);
   }
 
   return -1;
 }
+
 
 static int v2_get_error(void *instance, char *buf, int buf_len) {
   amy_instance_t *inst = (amy_instance_t *)instance;

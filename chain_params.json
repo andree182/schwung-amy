@@ -1,1 +1,16 @@
-[{"key":"preset","name":"Preset","type":"int","min":0,"max":257},{"key":"octave_transpose","name":"Octave","type":"int","min":-3,"max":3}]
+[
+  {"key":"preset","name":"Preset","type":"int","min":0,"max":257},
+  {"key":"octave_transpose","name":"Octave","type":"int","min":-3,"max":3},
+  {"key":"cutoff","name":"Cutoff","type":"float","min":50,"max":15000,"step":10},
+  {"key":"resonance","name":"Resonance","type":"float","min":0.5,"max":16.0,"step":0.1},
+  {"key":"filter_type","name":"Filter Type","type":"enum","options":["None","Lowpass","Bandpass","Highpass","Lowpass 24dB"]},
+  {"key":"volume","name":"Volume","type":"float","min":0.0,"max":2.0,"step":0.01},
+  {"key":"reverb","name":"Reverb","type":"float","min":0.0,"max":5.0,"step":0.05},
+  {"key":"chorus","name":"Chorus","type":"float","min":0.0,"max":5.0,"step":0.05},
+  {"key":"echo","name":"Echo","type":"float","min":0.0,"max":5.0,"step":0.05},
+  {"key":"echo_delay","name":"Echo Delay","type":"float","min":10,"max":700,"step":1},
+  {"key":"echo_feedback","name":"Echo Feedback","type":"float","min":0.0,"max":0.99,"step":0.01},
+  {"key":"eq_l","name":"EQ Low","type":"float","min":-15.0,"max":15.0,"step":0.5},
+  {"key":"eq_m","name":"EQ Mid","type":"float","min":-15.0,"max":15.0,"step":0.5},
+  {"key":"eq_h","name":"EQ High","type":"float","min":-15.0,"max":15.0,"step":0.5}
+]
