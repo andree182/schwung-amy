@@ -24,7 +24,7 @@
         "name": "Preset",
         "type": "int",
         "min": 0,
-        "max": 0,
+        "max": 257,
         "default": 0
       }
     ]

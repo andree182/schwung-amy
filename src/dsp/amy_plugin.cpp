@@ -53,6 +53,9 @@ extern "C" {
 #include "amy.h"
 }
 
+/* Preset Names */
+#include "preset_names.h"
+
 /* Host API reference */
 static const host_api_v1_t *g_host = nullptr;
 
@@ -106,10 +109,10 @@ typedef struct amy_instance_t {
     memset(module_dir, 0, sizeof(module_dir));
     memset(error_msg, 0, sizeof(error_msg));
     current_preset = 0;
-    preset_count = 1;
+    preset_count = 258;
     octave_transpose = 0;
     output_gain = 0.5f;
-    strcpy(preset_name, "Sine Synth");
+    strncpy(preset_name, AMY_PRESET_NAMES[0], sizeof(preset_name) - 1);
     ui_hierarchy_json = nullptr;
     chain_params_json = nullptr;
 
@@ -120,6 +123,37 @@ typedef struct amy_instance_t {
     note_counter = 0;
   }
 } amy_instance_t;
+
+/* =====================================================================
+ * Voice Configuration helper
+ * ===================================================================== */
+static void load_patch_for_voices(amy_instance_t *inst, int patch_number) {
+  char log_msg[256];
+  snprintf(log_msg, sizeof(log_msg), "Loading patch %d (%s)...", patch_number, AMY_PRESET_NAMES[patch_number]);
+  plugin_log(log_msg);
+
+  // Clear any active notes in our allocator
+  for (int i = 0; i < 16; i++) {
+    inst->voices[i].midi_note = -1;
+  }
+
+  // Reset all oscillators to start fresh
+  amy_event e_reset = amy_default_event();
+  e_reset.reset_osc = RESET_ALL_OSCS;
+  amy_add_event(&e_reset);
+  amy_execute_deltas();
+
+  // Configure voices 0..15 with patch_number under synth 0
+  amy_event e = amy_default_event();
+  e.patch_number = patch_number;
+  e.synth = 0;
+  e.num_voices = 16;
+  for (int i = 0; i < 16; i++) {
+    e.voices[i] = i;
+  }
+  amy_add_event(&e);
+  amy_execute_deltas();
+}
 
 /* =====================================================================
  * Plugin API v2 implementation
@@ -139,6 +173,8 @@ static void *v2_create_instance(const char *module_dir,
     config.midi = AMY_MIDI_IS_NONE;
     config.platform.multicore = 0;
     config.platform.multithread = 0;
+    // Set max oscillators higher to comfortably support 16 voices of DX7 patches (up to 8 oscs per voice)
+    config.max_oscs = 250;
     amy_start(config);
   }
 
@@ -166,10 +202,13 @@ static void *v2_create_instance(const char *module_dir,
 
   inst->chain_params_json = strdup(
     "["
-      "{\"key\":\"preset\",\"name\":\"Preset\",\"type\":\"int\",\"min\":0,\"max\":0},"
+      "{\"key\":\"preset\",\"name\":\"Preset\",\"type\":\"int\",\"min\":0,\"max\":257},"
       "{\"key\":\"octave_transpose\",\"name\":\"Octave\",\"type\":\"int\",\"min\":-3,\"max\":3}"
     "]"
   );
+
+  // Load default patch 0 for all voices
+  load_patch_for_voices(inst, 0);
 
   plugin_log("Instance created successfully.");
   return inst;
@@ -233,12 +272,8 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
       inst->voices[voice_idx].midi_note = transposed_note;
       inst->voices[voice_idx].last_used = ++inst->note_counter;
 
-      int osc = voice_idx;
-      reset_osc(osc);
-
       amy_event e = amy_default_event();
-      e.osc = osc;
-      e.wave = SINE;
+      e.voices[0] = voice_idx;
       e.midi_note = transposed_note;
       e.velocity = (float)velocity / 127.0f;
       amy_add_event(&e);
@@ -249,9 +284,8 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
       if (inst->voices[i].midi_note == transposed_note) {
         inst->voices[i].midi_note = -1;
 
-        int osc = i;
         amy_event e = amy_default_event();
-        e.osc = osc;
+        e.voices[0] = i;
         e.velocity = 0.0f;
         amy_add_event(&e);
       }
@@ -265,14 +299,23 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
     return;
 
   if (strcmp(key, "preset") == 0) {
-    inst->current_preset = atoi(val);
+    int patch = atoi(val);
+    if (patch >= 0 && patch < 258) {
+      inst->current_preset = patch;
+      strncpy(inst->preset_name, AMY_PRESET_NAMES[patch], sizeof(inst->preset_name) - 1);
+      load_patch_for_voices(inst, patch);
+    }
   } else if (strcmp(key, "octave_transpose") == 0) {
     inst->octave_transpose = atoi(val);
   } else if (strcmp(key, "all_notes_off") == 0) {
     for (int i = 0; i < 16; i++) {
       if (inst->voices[i].midi_note != -1) {
         inst->voices[i].midi_note = -1;
-        reset_osc(i);
+        
+        amy_event e = amy_default_event();
+        e.voices[0] = i;
+        e.velocity = 0.0f;
+        amy_add_event(&e);
       }
     }
   }
