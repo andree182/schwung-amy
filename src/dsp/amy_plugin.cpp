@@ -112,6 +112,7 @@ typedef struct amy_instance_t {
   int current_preset;
   int preset_count;
   int octave_transpose;
+  int aftertouch_mode;
   float output_gain;
   char preset_name[64];
 
@@ -147,6 +148,7 @@ typedef struct amy_instance_t {
     current_preset = 0;
     preset_count = 258;
     octave_transpose = 0;
+    aftertouch_mode = 0;
     output_gain = 0.5f;
     strncpy(preset_name, AMY_PRESET_NAMES[0], sizeof(preset_name) - 1);
     ui_hierarchy_json = nullptr;
@@ -285,10 +287,12 @@ static void *v2_create_instance(const char *module_dir,
           "\"children\":null,"
           "\"knobs\":[\"cutoff\",\"resonance\",\"volume\",\"reverb\",\"chorus\",\"echo\"],"
           "\"params\":["
+            "\"web_ui_info\","
             "{\"level\":\"category_jump\",\"label\":\"Jump to Category\"},"
             "{\"level\":\"filter\",\"label\":\"Filter\"},"
             "{\"level\":\"effects\",\"label\":\"Effects\"},"
-            "{\"level\":\"eq\",\"label\":\"EQ\"}"
+            "{\"level\":\"eq\",\"label\":\"EQ\"},"
+            "\"aftertouch_mode\""
           "]"
         "},"
         "\"category_jump\":{"
@@ -335,6 +339,8 @@ static void *v2_create_instance(const char *module_dir,
       "{\"key\":\"eq_l\",\"name\":\"EQ Low\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
       "{\"key\":\"eq_m\",\"name\":\"EQ Mid\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
       "{\"key\":\"eq_h\",\"name\":\"EQ High\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
+      "{\"key\":\"aftertouch_mode\",\"name\":\"Aftertouch\",\"type\":\"enum\",\"options\":[\"None\",\"Filter Cutoff\",\"Pitch Bend\",\"Amplitude\"]},"
+      "{\"key\":\"web_ui_info\",\"name\":\"Web UI\",\"type\":\"enum\",\"options\":[\"Use Web UI for more\"]},"
       "{\"key\":\"amy_wire\",\"name\":\"Wire Command\",\"type\":\"string\"}"
     "]"
   );
@@ -362,12 +368,12 @@ static void v2_destroy_instance(void *instance) {
 static void v2_on_midi(void *instance, const uint8_t *msg, int len,
                        int source) {
   amy_instance_t *inst = (amy_instance_t *)instance;
-  if (!inst || len < 3)
+  if (!inst || len < 2)
     return;
 
   uint8_t status = msg[0] & 0xF0;
   uint8_t note = msg[1];
-  uint8_t velocity = msg[2];
+  uint8_t velocity = (len >= 3) ? msg[2] : 0;
 
   int transposed_note = note + (inst->octave_transpose * 12);
   if (transposed_note < 0) transposed_note = 0;
@@ -376,8 +382,11 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
   if (status == 0x90 && velocity > 0) {
     // Note On
     int voice_idx = -1;
+    const int voice_start = 0;
+    const int voice_end = 16;
+
     // 1. Find if already playing
-    for (int i = 0; i < 16; i++) {
+    for (int i = voice_start; i < voice_end; i++) {
       if (inst->voices[i].midi_note == transposed_note) {
         voice_idx = i;
         break;
@@ -385,7 +394,7 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
     }
     // 2. Find free voice
     if (voice_idx == -1) {
-      for (int i = 0; i < 16; i++) {
+      for (int i = voice_start; i < voice_end; i++) {
         if (inst->voices[i].midi_note == -1) {
           voice_idx = i;
           break;
@@ -395,7 +404,7 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
     // 3. Steal voice (LRU)
     if (voice_idx == -1) {
       uint32_t oldest = 0xFFFFFFFF;
-      for (int i = 0; i < 16; i++) {
+      for (int i = voice_start; i < voice_end; i++) {
         if (inst->voices[i].last_used < oldest) {
           oldest = inst->voices[i].last_used;
           voice_idx = i;
@@ -423,6 +432,64 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len,
         e.voices[0] = i;
         e.velocity = 0.0f;
         amy_add_event(&e);
+      }
+    }
+  } else if (status == 0xA0 && len >= 3) {
+    // Polyphonic Key Pressure (Aftertouch)
+    if (inst->aftertouch_mode == 0) return;
+    uint8_t pressure = msg[2];
+    float pressure_val = (float)pressure / 127.0f;
+
+    int voice_idx = -1;
+    for (int i = 0; i < 16; i++) {
+      if (inst->voices[i].midi_note == transposed_note) {
+        voice_idx = i;
+        break;
+      }
+    }
+
+    if (voice_idx != -1 && voice_to_base_osc && voice_to_base_osc[voice_idx] != 65535) {
+      uint16_t base_osc = voice_to_base_osc[voice_idx];
+      amy_event e = amy_default_event();
+      e.osc = base_osc;
+
+      if (inst->aftertouch_mode == 1) { // Filter Cutoff
+        float new_cutoff = inst->filter_freq + (pressure_val * 6000.0f);
+        if (new_cutoff > 20000.0f) new_cutoff = 20000.0f;
+        e.filter_freq_coefs[COEF_CONST] = new_cutoff;
+        amy_add_event(&e);
+      } else if (inst->aftertouch_mode == 2) { // Pitch Bend
+        e.pitch_bend = pressure_val * (1.0f / 12.0f);
+        amy_add_event(&e);
+      } else if (inst->aftertouch_mode == 3) { // Amplitude
+        e.amp_coefs[COEF_CONST] = pressure_val;
+        amy_add_event(&e);
+      }
+    }
+  } else if (status == 0xD0) {
+    // Channel Key Pressure (Aftertouch)
+    if (inst->aftertouch_mode == 0) return;
+    uint8_t pressure = msg[1];
+    float pressure_val = (float)pressure / 127.0f;
+
+    for (int i = 0; i < 16; i++) {
+      if (inst->voices[i].midi_note != -1 && voice_to_base_osc && voice_to_base_osc[i] != 65535) {
+        uint16_t base_osc = voice_to_base_osc[i];
+        amy_event e = amy_default_event();
+        e.osc = base_osc;
+
+        if (inst->aftertouch_mode == 1) { // Filter Cutoff
+          float new_cutoff = inst->filter_freq + (pressure_val * 6000.0f);
+          if (new_cutoff > 20000.0f) new_cutoff = 20000.0f;
+          e.filter_freq_coefs[COEF_CONST] = new_cutoff;
+          amy_add_event(&e);
+        } else if (inst->aftertouch_mode == 2) { // Pitch Bend
+          e.pitch_bend = pressure_val * (1.0f / 12.0f);
+          amy_add_event(&e);
+        } else if (inst->aftertouch_mode == 3) { // Amplitude
+          e.amp_coefs[COEF_CONST] = pressure_val;
+          amy_add_event(&e);
+        }
       }
     }
   }
@@ -486,6 +553,9 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
     if (json_get_number(val, "eq_h", &fval) == 0) {
       v2_set_param(instance, "eq_h", std::to_string(fval).c_str());
     }
+    if (json_get_number(val, "aftertouch_mode", &fval) == 0) {
+      v2_set_param(instance, "aftertouch_mode", std::to_string((int)fval).c_str());
+    }
     return;
   }
 
@@ -499,6 +569,10 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
     }
   } else if (strcmp(key, "octave_transpose") == 0) {
     inst->octave_transpose = atoi(val);
+  } else if (strcmp(key, "aftertouch_mode") == 0) {
+    inst->aftertouch_mode = atoi(val);
+  } else if (strcmp(key, "web_ui_info") == 0) {
+    // No-op informational menu item
   } else if (strcmp(key, "all_notes_off") == 0) {
     for (int i = 0; i < 16; i++) {
       if (inst->voices[i].midi_note != -1) {
@@ -687,12 +761,13 @@ static int v2_get_param(void *instance, const char *key, char *buf,
                     ",\"cutoff\":%f,\"resonance\":%f,\"filter_type\":%d"
                     ",\"volume\":%f,\"reverb\":%f,\"chorus\":%f,\"echo\":%f"
                     ",\"echo_delay\":%f,\"echo_feedback\":%f"
-                    ",\"eq_l\":%f,\"eq_m\":%f,\"eq_h\":%f}",
+                    ",\"eq_l\":%f,\"eq_m\":%f,\"eq_h\":%f"
+                    ",\"aftertouch_mode\":%d}",
                     inst->current_preset, inst->octave_transpose,
                     inst->filter_freq, inst->resonance, inst->filter_type,
                     inst->volume, inst->reverb_level, inst->chorus_level, inst->echo_level,
                     inst->echo_delay_ms, inst->echo_feedback,
-                    inst->eq_l, inst->eq_m, inst->eq_h);
+                    inst->eq_l, inst->eq_m, inst->eq_h, inst->aftertouch_mode);
   }
   if (strcmp(key, "cutoff") == 0)
     return snprintf(buf, buf_len, "%f", inst->filter_freq);
@@ -718,6 +793,10 @@ static int v2_get_param(void *instance, const char *key, char *buf,
     return snprintf(buf, buf_len, "%f", inst->eq_m);
   if (strcmp(key, "eq_h") == 0)
     return snprintf(buf, buf_len, "%f", inst->eq_h);
+  if (strcmp(key, "aftertouch_mode") == 0)
+    return snprintf(buf, buf_len, "%d", inst->aftertouch_mode);
+  if (strcmp(key, "web_ui_info") == 0)
+    return snprintf(buf, buf_len, "Use Web UI for more");
   if (strcmp(key, "amy_wire") == 0)
     return snprintf(buf, buf_len, "%s", inst->amy_wire);
 

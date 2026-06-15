@@ -14,33 +14,50 @@ add_definitions(
     -DAMY_NO_MINIAUDIO=1
 )
 
-# Header search paths
+# Define paths
+set(AMY_ORIG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/amy/src")
+set(AMY_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/amy_src")
+
+# Copy the entire submodule source folder to the build directory
+file(COPY "${AMY_ORIG_DIR}/" DESTINATION "${AMY_BUILD_DIR}")
+
+file(APPEND "${AMY_BUILD_DIR}/amy.h" "
+/* --- CMake Injected Overrides --- */
+#undef AMY_SAMPLE_RATE
+#undef AMY_BLOCK_SIZE
+#undef BLOCK_SIZE_BITS
+#define AMY_SAMPLE_RATE 44100
+#define AMY_BLOCK_SIZE 128
+#define BLOCK_SIZE_BITS 7 // log2 of BLOCK_SIZE
+")
+
+# Header search paths (pointing to the new build directory)
 include_directories(
     src/dsp
-    src/dsp/amy/src
+    ${AMY_BUILD_DIR}
 )
 
-# Find sources
+# Find sources (pointing to the copied files in the build directory)
 set(AMY_SOURCES
-    src/dsp/amy/src/algorithms.c
-    src/dsp/amy/src/amy.c
-    src/dsp/amy/src/envelope.c
-    src/dsp/amy/src/parse.c
-    src/dsp/amy/src/filters.c
-    src/dsp/amy/src/oscillators.c
-    src/dsp/amy/src/pcm.c
-    src/dsp/amy/src/interp_partials.c
-    src/dsp/amy/src/custom.c
-    src/dsp/amy/src/delay.c
-    src/dsp/amy/src/log2_exp2.c
-    src/dsp/amy/src/patches.c
-    src/dsp/amy/src/transfer.c
-    src/dsp/amy/src/sequencer.c
-    src/dsp/amy/src/instrument.c
-    src/dsp/amy/src/amy_midi.c
-    src/dsp/amy/src/api.c
-    src/dsp/amy/src/midi_mappings.c
-    src/dsp/amy/src/cv_trigger.c
+    ${AMY_BUILD_DIR}/algorithms.c
+    ${AMY_BUILD_DIR}/amy.c
+    ${AMY_BUILD_DIR}/envelope.c
+    ${AMY_BUILD_DIR}/parse.c
+    ${AMY_BUILD_DIR}/filters.c
+    ${AMY_BUILD_DIR}/oscillators.c
+    ${AMY_BUILD_DIR}/pcm.c
+    ${AMY_BUILD_DIR}/interp_partials.c
+    ${AMY_BUILD_DIR}/custom.c
+    ${AMY_BUILD_DIR}/delay.c
+    ${AMY_BUILD_DIR}/log2_exp2.c
+    ${AMY_BUILD_DIR}/patches.c
+    ${AMY_BUILD_DIR}/transfer.c
+    ${AMY_BUILD_DIR}/sequencer.c
+    ${AMY_BUILD_DIR}/instrument.c
+    ${AMY_BUILD_DIR}/amy_midi.c
+    ${AMY_BUILD_DIR}/api.c
+    ${AMY_BUILD_DIR}/midi_mappings.c
+    ${AMY_BUILD_DIR}/cv_trigger.c
 )
 
 set(PLUGIN_SOURCES

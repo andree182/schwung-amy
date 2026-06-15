@@ -419,6 +419,16 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
 
         <!-- Right Pane: MIDI, Macros, Logs -->
         <div class="right-pane">
+            <!-- Preset Selector Panel -->
+            <div class="panel-section">
+                <h3 class="section-title">Synth Preset</h3>
+                <div class="midi-controls">
+                    <select id="preset-select" onchange="changePreset()">
+                        <option value="">Loading presets...</option>
+                    </select>
+                </div>
+            </div>
+
             <!-- MIDI Panel -->
             <div class="panel-section">
                 <h3 class="section-title">WebMIDI Router</h3>
@@ -499,6 +509,55 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
         connStatus.textContent = 'Offline';
     }
 
+    const categories = [
+        { name: "Juno Bank A", start: 0, end: 63 },
+        { name: "Juno Bank B", start: 64, end: 127 },
+        { name: "DX7 Brass & Winds", start: 128, end: 130 },
+        { name: "DX7 Strings & Choir", start: 131, end: 134 },
+        { name: "DX7 Pianos & Keys", start: 135, end: 138 },
+        { name: "DX7 Guitars & Basses", start: 139, end: 143 },
+        { name: "DX7 Organs & Pipes", start: 144, end: 147 },
+        { name: "DX7 Bells & Percussion", start: 148, end: 223 },
+        { name: "DX7 Synth Leads", start: 224, end: 239 },
+        { name: "DX7 Synth Pads & FX", start: 240, end: 255 },
+        { name: "Other (Piano/Init)", start: 256, end: 257 }
+    ];
+
+    const PRESET_NAMES = [
+        "Juno A11 Brass Set 1", "Juno A12 Brass Swell", "Juno A13 Trumpet", "Juno A14 Flutes", "Juno A15 Moving Strings", "Juno A16 Brass & Strings", "Juno A17 Choir", "Juno A18 Piano I", "Juno A21 Organ I", "Juno A22 Organ II", "Juno A23 Combo Organ", "Juno A24 Calliope", "Juno A25 Donald Pluck", "Juno A26 Celeste* (1 oct.up)", "Juno A27 Elect. Piano I", "Juno A28 Elect. Piano II", "Juno A31 Clock Chimes* (1 oct. up)", "Juno A32 Steel Drums", "Juno A33 Xylophone", "Juno A34 Brass III", "Juno A35 Fanfare", "Juno A36 String III", "Juno A37 Pizzicato", "Juno A38 High Strings", "Juno A41 Bass clarinet", "Juno A42 English Horn", "Juno A43 Brass Ensemble", "Juno A44 Guitar", "Juno A45 Koto", "Juno A46 Dark Pluck", "Juno A47 Funky I", "Juno A48 Synth Bass I (unison)", "Juno A51 Lead I", "Juno A52 Lead II", "Juno A53 Lead III", "Juno A54 Funky II", "Juno A55 Synth Bass II", "Juno A56 Funky III", "Juno A57 Thud Wah", "Juno A58 Going Up", "Juno A61 Piano II", "Juno A62 Clav", "Juno A63 Frontier Organ", "Juno A64 Snare Drum (unison)", "Juno A65 Tom Toms (unison)", "Juno A66 Timpani (unison)", "Juno A67 Shaker", "Juno A68 Synth Pad", "Juno A71 Sweep I", "Juno A72 Pluck Sweep", "Juno A73 Repeater", "Juno A74 Sweep II", "Juno A75 Pluck Bell", "Juno A76 Dark Synth Piano", "Juno A77 Sustainer", "Juno A78 Wah Release", "Juno A81 Gong (play low chords)", "Juno A82 Resonance Funk", "Juno A83 Drum Booms* (1 oct. down)", "Juno A84 Dust Storm", "Juno A85 Rocket Men", "Juno A86 Hand Claps", "Juno A87 FX Sweep", "Juno A88 Caverns", "Juno B11 Strings", "Juno B12 Violin", "Juno B13 Chorus Vibes", "Juno B14 Organ 1", "Juno B15 Harpsichord 1", "Juno B16 Recorder", "Juno B17 Perc. Pluck", "Juno B18 Noise Sweep", "Juno B21 Space Chimes", "Juno B22 Nylon Guitar", "Juno B23 Orchestral Pad", "Juno B24 Bright Pluck", "Juno B25 Organ Bell", "Juno B26 Accordion", "Juno B27 FX Rise 1", "Juno B28 FX Rise 2", "Juno B31 Brass", "Juno B32 Helicopter", "Juno B33 Lute", "Juno B34 Chorus Funk", "Juno B35 Tomita", "Juno B36 FX Sweep 1", "Juno B37 Sharp Reed", "Juno B38 Bass Pluck", "Juno B41 Resonant Rise", "Juno B42 Harpsichord 2", "Juno B43 Dark Ensemble", "Juno B44 Contact Wah", "Juno B45 Noise Sweep 2", "Juno B46 Glassy Wah", "Juno B47 Phase Ensemble", "Juno B48 Chorused Bell", "Juno B51 Clav", "Juno B52 Organ 2", "Juno B53 Bassoon", "Juno B54 Auto Release Noise Sweep", "Juno B55 Brass Ensemble", "Juno B56 Ethereal", "Juno B57 Chorus Bell 2", "Juno B58 Blizzard", "Juno B61 E. Piano with Tremolo", "Juno B62 Clarinet", "Juno B63 Thunder", "Juno B64 Reedy Organ", "Juno B65 Flute / Horn", "Juno B66 Toy Rhodes", "Juno B67 Surf's Up", "Juno B68 OW Bass", "Juno B71 Piccolo", "Juno B72 Melodic Taps", "Juno B73 Meow Brass", "Juno B74 Violin (high)", "Juno B75 High Bells", "Juno B76 Rolling Wah", "Juno B77 Ping Bell", "Juno B78 Brassy Organ", "Juno B81 Low Dark Strings", "Juno B82 Piccolo Trumpet", "Juno B83 Cello", "Juno B84 High Strings", "Juno B85 Rocket Men", "Juno B86 Forbidden Planet", "Juno B87 Froggy", "Juno B88 Owgan", "DX7 BRASS   1", "DX7 BRASS   2", "DX7 BRASS   3", "DX7 STRINGS 1", "DX7 STRINGS 2", "DX7 STRINGS 3", "DX7 ORCHESTRA", "DX7 PIANO   1", "DX7 PIANO   2", "DX7 PIANO   3", "DX7 E.PIANO 1", "DX7 GUITAR  1", "DX7 GUITAR  2", "DX7 SYN-LEAD 1", "DX7 BASS    1", "DX7 BASS    2", "DX7 E.ORGAN 1", "DX7 PIPES   1", "DX7 HARPSICH 1", "DX7 CLAV    1", "DX7 VIBE    1", "DX7 MARIMBA", "DX7 KOTO", "DX7 FLUTE   1", "DX7 ORCH-CHIME", "DX7 TUB BELLS", "DX7 STEEL DRUM", "DX7 TIMPANI", "DX7 REFS WHISL", "DX7 VOICE   1", "DX7 TRAIN", "DX7 TAKE OFF", "DX7 PIANO   4", "DX7 PIANO   5", "DX7 E.PIANO 2", "DX7 E.PIANO 3", "DX7 E.PIANO 4", "DX7 PIANO 5THS", "DX7 CELESTE", "DX7 TOY PIANO", "DX7 HARPSICH 2", "DX7 HARPSICH 3", "DX7 CLAV    2", "DX7 CLAV    3", "DX7 E.ORGAN 2", "DX7 E.ORGAN 3", "DX7 E.ORGAN 4", "DX7 E.ORGAN 5", "DX7 PIPES   2", "DX7 PIPES   3", "DX7 PIPES   4", "DX7 CALIOPE", "DX7 ACCORDION", "DX7 SITAR", "DX7 GUITAR  3", "DX7 GUITAR  4", "DX7 GUITAR  5", "DX7 GUITAR  6", "DX7 LUTE", "DX7 BANJO", "DX7 HARP    1", "DX7 HARP    2", "DX7 BASS    3", "DX7 BASS    4", "DX7 PICCOLO", "DX7 FLUTE   2", "DX7 OBOE", "DX7 CLARINET", "DX7 SAX BC", "DX7 BASSOON", "DX7 STRINGS 4", "DX7 STRINGS 5", "DX7 STRINGS 6", "DX7 STRINGS 7", "DX7 STRINGS 8", "DX7 BRASS   4", "DX7 BRASS   5", "DX7 BRASS 6 BC", "DX7 BRASS   7", "DX7 BRASS   8", "DX7 RECORDER", "DX7 HARMONICA1", "DX7 HRMNCA2 BC", "DX7 VOICE   2", "DX7 VOICE   3", "DX7 GLOKENSPL", "DX7 VIBE    2", "DX7 XYLOPHONE", "DX7 CHIMES", "DX7 GONG    1", "DX7 GONG    2", "DX7 BELLS", "DX7 COW BELL", "DX7 BLOCK", "DX7 FLEXATONE", "DX7 LOG DRUM", "DX7 SYN-LEAD 2", "DX7 SYN-LEAD 3", "DX7 SYN-LEAD 4", "DX7 SYN-LEAD 5", "DX7 SYN-CLAV 1", "DX7 SYN-CLAV 2", "DX7 SYN-CLAV 3", "DX7 SYN-PIANO", "DX7 SYNBRASS 1", "DX7 SYNBRASS 2", "DX7 SYNORGAN 1", "DX7 SYNORGAN 2", "DX7 SYN-VOX", "DX7 SYN-ORCH", "DX7 SYN-BASS 1", "DX7 SYN-BASS 2", "DX7 HARP-FLUTE", "DX7 BELL-FLUTE", "DX7 E.P-BRS BC", "DX7 T.BL-EXPA", "DX7 CHIME-STRG", "DX7 B.DRM-SNAR", "DX7 SHIMMER", "DX7 EVOLUTION", "DX7 WATER GDN", "DX7 WASP STING", "DX7 LASER GUN", "DX7 DESCENT", "DX7 OCTAVE WAR", "DX7 GRAND PRIX", "DX7 ST.HELENS", "DX7 EXPLOSION", "dpwe piano", "amyboard default"
+    ];
+
+    function populatePresets() {
+        const select = document.getElementById('preset-select');
+        select.innerHTML = '';
+        
+        let currentOptGroup = null;
+        for (let i = 0; i < PRESET_NAMES.length; i++) {
+            let catName = "Other";
+            for (let c = 0; c < categories.length; c++) {
+                if (i >= categories[c].start && i <= categories[c].end) {
+                    catName = categories[c].name;
+                    break;
+                }
+            }
+            if (!currentOptGroup || currentOptGroup.label !== catName) {
+                currentOptGroup = document.createElement('optgroup');
+                currentOptGroup.label = catName;
+                select.appendChild(currentOptGroup);
+            }
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${i}: ${PRESET_NAMES[i]}`;
+            currentOptGroup.appendChild(opt);
+        }
+    }
+
+    function changePreset() {
+        const val = document.getElementById('preset-select').value;
+        remote.setParam('synth:preset', val);
+        log(`Changed preset to ${val}: ${PRESET_NAMES[val]}`, 'sent');
+    }
+
     // We implement the mock of WebMidi / postMessage if offline, otherwise use schwungRemote
     const remote = window.schwungRemote || {
         setParam: (key, val) => log(`[Offline SetParam] ${key} = ${val}`, 'sent'),
@@ -528,6 +587,12 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
                 const val = parseFloat(params['synth:reverb']);
                 document.getElementById('slider-reverb').value = val.toFixed(2);
                 document.getElementById('val-reverb').textContent = val.toFixed(2);
+            }
+            if (params['synth:preset'] !== undefined) {
+                const val = parseInt(params['synth:preset']);
+                if (!isNaN(val) && val >= 0 && val < PRESET_NAMES.length) {
+                    document.getElementById('preset-select').value = val;
+                }
             }
         });
 
@@ -581,8 +646,10 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
     // Reset AMY synth engine completely
     function resetAMY() {
         log('Resetting AMY synthesiser engine...', 'info');
+        remote.setParam('synth:aftertouch_mode', 0); // Reset aftertouch mode
         remote.setParam('synth:amy_wire', 'S' + (4096 + 8192) + 'Z'); // Reset sequencer + all oscs
         remote.setParam('synth:amy_wire', 'S262144Z'); // Reset synths/instruments
+        amy_send({synth: 0, num_voices: 16, patch: 0}); // Re-initialize default patch 0
     }
 
     // Set slider macro parameters
@@ -654,6 +721,73 @@ amy_send({patch: 0, synth: 0, num_voices: 16});
 amy_send({synth: 0, vel: 0.7, note: 60}); // C4
 amy_send({synth: 0, vel: 0.7, note: 63}); // Eb4
 amy_send({synth: 0, vel: 0.7, note: 67}); // G4`
+        },
+        {
+            title: "Additive Synth",
+            code: `// Additive Synth (Sine Combination) Example
+// Configures all 16 voices under synth 0 to play 3 harmonics
+// (fundamental, 2nd, and 3rd harmonics) when triggered from Move.
+
+// 1. Release synth 0 voices first to force reallocation with new oscs_per_voice
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 4 oscillators per voice for all 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 4});
+
+// 3. Configure the additive partials
+for (let v = 0; v < 16; v++) {
+  const base = v * 4;
+  // Parent BYO_PARTIALS coordinator (tells AMY to trigger 3 partials)
+  amy_send({
+    osc: base, 
+    wave: AMY.BYO_PARTIALS, 
+    preset: 3, 
+    bp0: '0,1.0,10000,1.0,0,0' // Main gate envelope
+  });
+  
+  // Harmonic 1 (Fundamental, ratio 1.0)
+  // freq = 8.1758 (plays at parent note frequency)
+  amy_send({
+    osc: base + 1, 
+    wave: AMY.PARTIAL, 
+    freq: 8.1758, 
+    bp0: '50,0.8,1000,0.4,500,0'
+  });
+  
+  // Harmonic 2 (2nd harmonic, ratio 2.0)
+  // freq = 16.3516 (plays at 2x parent note frequency)
+  amy_send({
+    osc: base + 2, 
+    wave: AMY.PARTIAL, 
+    freq: 16.3516, 
+    bp0: '30,0.4,400,0.1,200,0'
+  });
+  
+  // Harmonic 3 (3rd harmonic, ratio 3.0)
+  // freq = 24.5274 (plays at 3x parent note frequency)
+  amy_send({
+    osc: base + 3, 
+    wave: AMY.PARTIAL, 
+    freq: 24.5274, 
+    bp0: '10,0.2,150,0'
+  });
+}
+log("Additive synth patch initialized. Play on Move pads or route MIDI!", "info");`
+        },
+        {
+            title: "Poly Aftertouch",
+            code: `// Polyphonic Aftertouch Modulation Example
+// Configures pad pressure (aftertouch) to modulate the filter cutoff frequency
+// of individual notes played on the Move pads.
+
+// 1. Set Aftertouch Mode to Filter Cutoff (Mode 1)
+// Modes: 0 = None, 1 = Filter Cutoff, 2 = Pitch Bend, 3 = Amplitude
+remote.setParam('synth:aftertouch_mode', 1);
+
+// 2. Load Juno Moving Strings (Preset 4) for a pad sound with nice filters
+amy_send({synth: 0, num_voices: 16, patch: 4});
+
+log("Poly aftertouch enabled (Filter Cutoff)! Play pads on Move and apply pressure.", "info");`
         }
     ];
 
@@ -736,8 +870,11 @@ amy_send({synth: 0, vel: 0.7, note: 67}); // G4`
         }
     }
 
-    // Initialize MIDI on load
-    window.addEventListener('load', initMidi);
+    // Initialize on load
+    window.addEventListener('load', () => {
+        populatePresets();
+        initMidi();
+    });
 </script>
 
 </body>

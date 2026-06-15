@@ -66,6 +66,8 @@ cat src/module.json > dist/amy/module.json
 [ -f LICENSE ] && cat LICENSE > dist/amy/LICENSE
 [ -f NOTICE ]  && cat NOTICE  > dist/amy/NOTICE
 cat src/ui.js > dist/amy/ui.js
+[ -f src/web_ui.html ] && cat src/web_ui.html > dist/amy/web_ui.html
+[ -f src/dsp/amy/docs/amy.js ] && cat src/dsp/amy/docs/amy.js > dist/amy/amy.js
 cat build/dsp.so > dist/amy/dsp.so
 chmod +x dist/amy/dsp.so
 
