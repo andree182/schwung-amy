@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMY Synth Web REPL</title>
+    <!-- Include the Schwung Remote API -->
+    <script src="/static/schwung-remote-api.js"></script>
+    <!-- Load local amy.js for wire message encoding -->
+    <script src="amy.js"></script>
+    
+    <!-- CodeMirror for code editing -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/codemirror.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/theme/monokai.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/mode/javascript/javascript.min.js"></script>
+    
+    <!-- WebMIDI for browser keyboard routing -->
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
+    
+    <!-- Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-bg: rgba(26, 29, 45, 0.65);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f0f2f5;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-glow: rgba(88, 166, 255, 0.35);
+            --accent-purple: #bd58ff;
+            --success: #2ea043;
+            --danger: #f85149;
+            --font-main: 'Inter', sans-serif;
+            --font-display: 'Outfit', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(20, 30, 60, 0.4) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(50, 20, 80, 0.4) 0px, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .app-window {
+            background-color: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 1080px;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+        }
+
+        header {
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .logo-section h1 {
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-section p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .connection-badge {
+            background: rgba(46, 160, 67, 0.15);
+            border: 1px solid var(--success);
+            color: #56d364;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .connection-badge.disconnected {
+            background: rgba(248, 81, 73, 0.15);
+            border-color: var(--danger);
+            color: #f85149;
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: currentColor;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            height: 640px;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+        }
+
+        .left-pane {
+            padding: 24px 30px;
+            border-right: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow: hidden;
+        }
+
+        .right-pane {
+            padding: 24px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .editor-container {
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .editor-toolbar {
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toolbar-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        button.btn-primary {
+            background: var(--accent);
+            color: #000;
+            font-weight: 700;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-glow);
+            transition: all 0.2s;
+        }
+
+        button.btn-primary:hover {
+            background: #79c0ff;
+            box-shadow: 0 0 15px var(--accent);
+        }
+
+        button.btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            font-weight: 600;
+            border: 1px solid var(--panel-border);
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button.btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .CodeMirror {
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            height: 320px !important;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .examples-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .pills-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .pill {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pill:hover {
+            background: rgba(88, 166, 255, 0.1);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .pill.active {
+            background: var(--accent);
+            color: #000;
+            font-weight: 600;
+            border-color: var(--accent);
+        }
+
+        .panel-section {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .midi-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        select {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        select:focus {
+            border-color: var(--accent);
+        }
+
+        .macro-sliders {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .slider-box {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-glow);
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.25);
+        }
+
+        .log-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+            min-height: 140px;
+        }
+
+        .log-terminal {
+            background: #050508;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-family: 'Fira Code', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            overflow-y: auto;
+            flex: 1;
+            white-space: pre-wrap;
+            max-height: 180px;
+        }
+
+        .log-terminal .sent { color: #7ee787; }
+        .log-terminal .recv { color: #a5d6ff; }
+        .log-terminal .info { color: #d2a8ff; }
+        .log-terminal .error { color: #ff7b72; }
+    </style>
+</head>
+<body>
+
+<div class="app-window">
+    <header>
+        <div class="logo-section">
+            <h1><span>⚡</span> AMY Synth REPL</h1>
+            <p>Direct C++ synthesis engine interaction via JavaScript & MIDI</p>
+        </div>
+        <div class="connection-badge" id="conn-badge">
+            <span class="badge-dot"></span>
+            <span id="conn-status">Connecting</span>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <!-- Left Pane: Editor, Actions, Examples -->
+        <div class="left-pane">
+            <div class="editor-container">
+                <div class="editor-toolbar">
+                    <span class="toolbar-title">JavaScript Sandbox</span>
+                    <div class="editor-actions">
+                        <button class="btn-secondary" onclick="resetAMY()">Reset Engine</button>
+                        <button class="btn-primary" onclick="runCode()">► Run Code</button>
+                    </div>
+                </div>
+                <textarea id="code-box">// Play a simple sine wave chord
+amy_send({osc: 0, wave: AMY.SINE, freq: 261.63, vel: 0.6}) // C4
+amy_send({osc: 1, wave: AMY.SINE, freq: 329.63, vel: 0.6}) // E4
+amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
+</textarea>
+            </div>
+
+            <div class="examples-section">
+                <h3 class="section-title">Synth Examples</h3>
+                <div class="pills-container" id="pills-container"></div>
+            </div>
+        </div>
+
+        <!-- Right Pane: MIDI, Macros, Logs -->
+        <div class="right-pane">
+            <!-- MIDI Panel -->
+            <div class="panel-section">
+                <h3 class="section-title">WebMIDI Router</h3>
+                <div class="midi-controls">
+                    <select id="midi-select" onchange="changeMidiInput()">
+                        <option value="">[Detecting MIDI devices...]</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Macros Panel -->
+            <div class="panel-section">
+                <h3 class="section-title">Macro Controls</h3>
+                <div class="macro-sliders">
+                    <div class="slider-box">
+                        <div class="slider-label">
+                            <span>Cutoff</span>
+                            <span id="val-cutoff">800Hz</span>
+                        </div>
+                        <input type="range" id="slider-cutoff" min="50" max="15000" step="10" value="800" oninput="setMacro('cutoff', this.value)">
+                    </div>
+                    <div class="slider-box">
+                        <div class="slider-label">
+                            <span>Resonance</span>
+                            <span id="val-resonance">0.7</span>
+                        </div>
+                        <input type="range" id="slider-resonance" min="0.5" max="16.0" step="0.1" value="0.7" oninput="setMacro('resonance', this.value)">
+                    </div>
+                    <div class="slider-box">
+                        <div class="slider-label">
+                            <span>Volume</span>
+                            <span id="val-volume">0.5</span>
+                        </div>
+                        <input type="range" id="slider-volume" min="0.0" max="2.0" step="0.01" value="0.5" oninput="setMacro('volume', this.value)">
+                    </div>
+                    <div class="slider-box">
+                        <div class="slider-label">
+                            <span>Reverb</span>
+                            <span id="val-reverb">0.0</span>
+                        </div>
+                        <input type="range" id="slider-reverb" min="0.0" max="5.0" step="0.05" value="0.0" oninput="setMacro('reverb', this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Logs -->
+            <div class="log-section">
+                <h3 class="section-title">Console Output</h3>
+                <div class="log-terminal" id="terminal-log">
+                    <div class="info">[System] Remote UI loaded. Connecting to parent host...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const term = document.getElementById('terminal-log');
+    const connBadge = document.getElementById('conn-badge');
+    const connStatus = document.getElementById('conn-status');
+
+    function log(msg, type = '') {
+        const div = document.createElement('div');
+        div.className = type;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        term.appendChild(div);
+        term.scrollTop = term.scrollHeight;
+    }
+
+    // Connect to parent Schwung page
+    log('Initializing Schwung Remote UI client...', 'info');
+    
+    // Check if we are inside an iframe
+    const isIframe = window.self !== window.top;
+    if (!isIframe) {
+        log('Warning: Not running inside Schwung iframe! Offline mode.', 'error');
+        connBadge.className = 'connection-badge disconnected';
+        connStatus.textContent = 'Offline';
+    }
+
+    // We implement the mock of WebMidi / postMessage if offline, otherwise use schwungRemote
+    const remote = window.schwungRemote || {
+        setParam: (key, val) => log(`[Offline SetParam] ${key} = ${val}`, 'sent'),
+        onParamChange: (cb) => log('[Offline] Parameter change notifications not available.', 'info'),
+        getParam: (key) => Promise.resolve('0')
+    };
+
+    if (isIframe) {
+        remote.onParamChange((params) => {
+            // Update local sliders if changed from Move hardware knobs or web knobs
+            if (params['synth:cutoff'] !== undefined) {
+                const val = parseFloat(params['synth:cutoff']);
+                document.getElementById('slider-cutoff').value = val;
+                document.getElementById('val-cutoff').textContent = Math.round(val) + 'Hz';
+            }
+            if (params['synth:resonance'] !== undefined) {
+                const val = parseFloat(params['synth:resonance']);
+                document.getElementById('slider-resonance').value = val.toFixed(1);
+                document.getElementById('val-resonance').textContent = val.toFixed(1);
+            }
+            if (params['synth:volume'] !== undefined) {
+                const val = parseFloat(params['synth:volume']);
+                document.getElementById('slider-volume').value = val.toFixed(2);
+                document.getElementById('val-volume').textContent = val.toFixed(2);
+            }
+            if (params['synth:reverb'] !== undefined) {
+                const val = parseFloat(params['synth:reverb']);
+                document.getElementById('slider-reverb').value = val.toFixed(2);
+                document.getElementById('val-reverb').textContent = val.toFixed(2);
+            }
+        });
+
+        connBadge.className = 'connection-badge';
+        connStatus.textContent = 'Connected';
+        log('Connected to Schwung Remote host.', 'info');
+    }
+
+    // Custom amy_send implementation for the REPL environment
+    window.amy_send = function(params) {
+        try {
+            // Check if amy_message serializer is available
+            if (typeof amy_message !== 'function') {
+                throw new Error('amy_message is not defined. Make sure amy.js is loaded.');
+            }
+            const wireCmd = amy_message(params);
+            remote.setParam('synth:amy_wire', wireCmd);
+            log(`Wire: ${wireCmd}`, 'sent');
+            return wireCmd;
+        } catch (e) {
+            log(`amy_send Error: ${e.message}`, 'error');
+            console.error(e);
+        }
+    };
+
+    // Initialize CodeMirror Editor
+    const editor = CodeMirror.fromTextArea(document.getElementById('code-box'), {
+        mode: 'javascript',
+        theme: 'monokai',
+        lineNumbers: true,
+        tabSize: 2,
+        indentWithTabs: false
+    });
+
+    // Run REPL script
+    function runCode() {
+        log('Executing script block...', 'info');
+        const code = editor.getValue();
+        try {
+            // Reset times by sending RESET_TIMEBASE command to start delta streams from 0
+            remote.setParam('synth:amy_wire', 'S16384Z');
+            
+            // Execute the JS block
+            new Function(code)();
+            log('Script execution complete.', 'info');
+        } catch (e) {
+            log(`Execution Error: ${e.message}`, 'error');
+        }
+    }
+
+    // Reset AMY synth engine completely
+    function resetAMY() {
+        log('Resetting AMY synthesiser engine...', 'info');
+        remote.setParam('synth:amy_wire', 'S' + (4096 + 8192) + 'Z'); // Reset sequencer + all oscs
+        remote.setParam('synth:amy_wire', 'S262144Z'); // Reset synths/instruments
+    }
+
+    // Set slider macro parameters
+    function setMacro(key, value) {
+        const fullKey = `synth:${key}`;
+        remote.setParam(fullKey, value);
+        
+        // Update local label
+        if (key === 'cutoff') {
+            document.getElementById('val-cutoff').textContent = Math.round(value) + 'Hz';
+        } else if (key === 'resonance') {
+            document.getElementById('val-resonance').textContent = parseFloat(value).toFixed(1);
+        } else if (key === 'volume') {
+            document.getElementById('val-volume').textContent = parseFloat(value).toFixed(2);
+        } else if (key === 'reverb') {
+            document.getElementById('val-reverb').textContent = parseFloat(value).toFixed(2);
+        }
+    }
+
+    // Examples mapping
+    const examples = [
+        {
+            title: "Synth Note",
+            code: `// Play a single note using a DX7 FM patch
+// Instrument 0 is initialized as polyphonic synth on startup
+amy_send({synth: 0, note: 60, vel: 0.8})`
+        },
+        {
+            title: "Sine Cascade",
+            code: `// Schedule a series of ascending sine partials
+for (let i = 0; i < 16; i++) {
+  amy_send({
+    osc: i, 
+    wave: AMY.SINE, 
+    freq: 110 + i * 55, 
+    vel: (16 - i) / 32.0, 
+    time: i * 150
+  });
+}`
+        },
+        {
+            title: "Filtered Sweep",
+            code: `// Lowpass filter envelope sweep on a raw sawtooth wave
+amy_send({osc: 0, wave: AMY.SAW_DOWN, resonance: 6.0, filter_type: AMY.FILTER_LPF});
+amy_send({osc: 0, filter_freq: '100,0,0,0,1', bp1: '0,5.0,800,2.5,300,0'});
+amy_send({osc: 0, note: 48, vel: 0.9});`
+        },
+        {
+            title: "FM Synthesis",
+            code: `// 2-operator FM patch: modulator frequency/amp mod sweep
+// Osc 2 is modulator, Osc 1 is carrier, Osc 0 mixes them via ALGO
+amy_send({osc: 2, wave: AMY.SINE, ratio: 0.5, amp: {const: 1.0, vel: 0, eg0: 3.5}, bp0: '0,0,3000,1.0,0,0'});
+amy_send({osc: 1, wave: AMY.SINE, ratio: 1.0, amp: {const: 1.0, vel: 0, eg0: 0}});
+amy_send({osc: 0, wave: AMY.ALGO, algorithm: 1, algo_source: ',,,,2,1'});
+amy_send({osc: 0, note: 50, vel: 0.85});`
+        },
+        {
+            title: "Drum Sequencer",
+            code: `// Sequenced pattern using AMY's internal PCM drum samples
+// Osc 0 plays closed-hat (preset 0) every 8th note (96 ticks)
+// Osc 1 plays kick drum (preset 1) every quarter note (192 ticks)
+amy_send({osc: 0, vel: 0.8, wave: AMY.PCM, preset: 0, sequence: ',96,1'});
+amy_send({osc: 1, vel: 1.0, wave: AMY.PCM, preset: 1, sequence: ',192,2'});`
+        },
+        {
+            title: "Juno Chord",
+            code: `// Load Juno A11 Brass (patch 0) and play a minor triad
+amy_send({patch: 0, synth: 0, num_voices: 16});
+amy_send({synth: 0, vel: 0.7, note: 60}); // C4
+amy_send({synth: 0, vel: 0.7, note: 63}); // Eb4
+amy_send({synth: 0, vel: 0.7, note: 67}); // G4`
+        }
+    ];
+
+    // Build examples selector
+    const pills = document.getElementById('pills-container');
+    examples.forEach((ex, idx) => {
+        const p = document.createElement('span');
+        p.className = 'pill';
+        if (idx === 0) p.className += ' active';
+        p.textContent = ex.title;
+        p.onclick = () => {
+            document.querySelectorAll('.pill').forEach(el => el.classList.remove('active'));
+            p.classList.add('active');
+            editor.setValue(ex.code.trim());
+            log(`Loaded example: "${ex.title}"`, 'info');
+        };
+        pills.appendChild(p);
+    });
+
+    // MIDI Routing Setup
+    let activeMidiInput = null;
+
+    function initMidi() {
+        if (typeof WebMidi === 'undefined') {
+            log('WebMIDI script not loaded yet.', 'error');
+            return;
+        }
+
+        WebMidi.enable({ sysex: true })
+            .then(onMidiEnabled)
+            .catch(err => {
+                log(`MIDI support not available in browser: ${err.message}`, 'error');
+                document.getElementById('midi-select').innerHTML = '<option value="">[MIDI not supported]</option>';
+            });
+    }
+
+    function onMidiEnabled() {
+        const select = document.getElementById('midi-select');
+        select.innerHTML = '';
+
+        if (WebMidi.inputs.length === 0) {
+            select.innerHTML = '<option value="">[No MIDI devices found]</option>';
+            log('No MIDI input devices detected.', 'info');
+            return;
+        }
+
+        select.innerHTML = '<option value="">Select MIDI Device...</option>';
+        WebMidi.inputs.forEach(input => {
+            const opt = document.createElement('option');
+            opt.value = input.id;
+            opt.textContent = input.name;
+            select.appendChild(opt);
+        });
+        
+        log('WebMIDI initialized. Select a device to route keys.', 'info');
+    }
+
+    function changeMidiInput() {
+        const select = document.getElementById('midi-select');
+        const id = select.value;
+
+        if (activeMidiInput) {
+            activeMidiInput.removeListener();
+            activeMidiInput = null;
+        }
+
+        if (!id) return;
+
+        activeMidiInput = WebMidi.getInputById(id);
+        if (activeMidiInput) {
+            log(`Routing MIDI input from: "${activeMidiInput.name}"`, 'info');
+            
+            // Route Note On / Off directly to synth 0
+            activeMidiInput.addListener('noteon', e => {
+                amy_send({ synth: 0, note: e.note.number, vel: e.velocity });
+            });
+            activeMidiInput.addListener('noteoff', e => {
+                amy_send({ synth: 0, note: e.note.number, vel: 0 });
+            });
+        }
+    }
+
+    // Initialize MIDI on load
+    window.addEventListener('load', initMidi);
+</script>
+
+</body>
+</html>

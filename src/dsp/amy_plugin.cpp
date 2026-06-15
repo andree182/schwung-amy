@@ -132,6 +132,7 @@ typedef struct amy_instance_t {
   /* Pre-built JSON strings */
   char *ui_hierarchy_json;
   char *chain_params_json;
+  char amy_wire[256];
 
   /* Voice Management */
   struct Voice {
@@ -150,6 +151,7 @@ typedef struct amy_instance_t {
     strncpy(preset_name, AMY_PRESET_NAMES[0], sizeof(preset_name) - 1);
     ui_hierarchy_json = nullptr;
     chain_params_json = nullptr;
+    memset(amy_wire, 0, sizeof(amy_wire));
 
     filter_freq = 8000.0f;
     resonance = 0.707f;
@@ -332,7 +334,8 @@ static void *v2_create_instance(const char *module_dir,
       "{\"key\":\"echo_feedback\",\"name\":\"Echo Feedback\",\"type\":\"float\",\"min\":0.0,\"max\":0.99,\"step\":0.01},"
       "{\"key\":\"eq_l\",\"name\":\"EQ Low\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
       "{\"key\":\"eq_m\",\"name\":\"EQ Mid\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
-      "{\"key\":\"eq_h\",\"name\":\"EQ High\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5}"
+      "{\"key\":\"eq_h\",\"name\":\"EQ High\",\"type\":\"float\",\"min\":-15.0,\"max\":15.0,\"step\":0.5},"
+      "{\"key\":\"amy_wire\",\"name\":\"Wire Command\",\"type\":\"string\"}"
     "]"
   );
 
@@ -635,6 +638,13 @@ static void v2_set_param(void *instance, const char *key, const char *val) {
     e.bus = 0;
     e.eq_h = gain;
     amy_add_event(&e);
+  } else if (strcmp(key, "amy_wire") == 0) {
+    strncpy(inst->amy_wire, val, sizeof(inst->amy_wire) - 1);
+    inst->amy_wire[sizeof(inst->amy_wire) - 1] = '\0';
+    char cmd_buf[1024];
+    strncpy(cmd_buf, val, sizeof(cmd_buf) - 1);
+    cmd_buf[sizeof(cmd_buf) - 1] = '\0';
+    amy_add_message(cmd_buf);
   }
 }
 
@@ -708,6 +718,8 @@ static int v2_get_param(void *instance, const char *key, char *buf,
     return snprintf(buf, buf_len, "%f", inst->eq_m);
   if (strcmp(key, "eq_h") == 0)
     return snprintf(buf, buf_len, "%f", inst->eq_h);
+  if (strcmp(key, "amy_wire") == 0)
+    return snprintf(buf, buf_len, "%s", inst->amy_wire);
 
   if (strcmp(key, "category_list") == 0) {
     std::string json = "[";
