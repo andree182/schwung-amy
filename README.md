@@ -1,19 +1,20 @@
 # AMY for Schwung
 
-Polyphonic synthesizer module based on the [AMY](https://github.com/shorepine/amy) synthesizer engine by Brian Whitman.
+Polyphonic synthesizer module based on the [AMY](https://github.com/shorepine/amy) synthesizer engine.
 
 ## Features
 
 Main feature highlights:
-* 16-voice polyphony
+* Lightweight and polyphonic
 * Fast and low-latency fixed-point DSP engine
+* DX7- and Juno- based presets, as well as a piano simulation
 * Support for multiple synthesis algorithms:
   * Subtractive (Sine, Triangle, Saw, Pulse waveforms)
   * Frequency Modulation (FM synthesis)
   * Physical Modeling (Karplus-Strong string modeling)
   * PCM / Wave samples
   * Additive / Partials synthesis
-* Integrates into Schwung UI
+* Integrates into Schwung UI - web UI allows for programming using javascript API
 
 ## Prerequisites
 

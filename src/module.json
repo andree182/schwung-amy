@@ -4,7 +4,7 @@
   "abbrev": "AMY",
   "version": "1.0",
   "description": "AMY Music Synthesizer Engine",
-  "author": "Brian Whitman (port: antigravity)",
+  "author": "DAn Ellis and Brian Whitman (port: andree182)",
   "license": "MIT",
   "ui": "ui.js",
   "dsp": "dsp.so",
