@@ -253,9 +253,15 @@ static void *v2_create_instance(const char *module_dir,
     config.midi = AMY_MIDI_IS_NONE;
     config.platform.multicore = 0;
     config.platform.multithread = 0;
-    // Set max oscillators higher to comfortably support 16 voices of DX7 patches (up to 8 oscs per voice)
-    config.max_oscs = 250;
+    // Set max oscillators higher to comfortably support 16 voices of DX7 patches and piano (which needs 25 oscs per voice)
+    config.max_oscs = 450;
     amy_start(config);
+
+    // Pre-allocate all oscillators up to max capacity with max breakpoints to avoid any realtime memory allocation.
+    uint8_t max_bps[MAX_BREAKPOINT_SETS] = {MAX_BREAKPOINTS, MAX_BREAKPOINTS};
+    for (int osc = 0; osc < AMY_OSCS + AMY_NUM_BUSES; osc++) {
+      ensure_osc_allocd(osc, max_bps);
+    }
   }
 
   // Pre-load the JSON metadata
