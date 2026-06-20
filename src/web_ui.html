@@ -1044,6 +1044,79 @@ for (let v = 0; v < 16; v++) {
 }
 
 log("Poly FM Bell initialized. Play polyphonic bell chords!", "info");`
+        },
+        {
+            title: "JS Triple LFO",
+            code: `// JS Volume & Pitch LFO Modulator (User/MIDI Playable)
+// Modulates volumes of two oscillators per voice (osc 0 = saw, osc 1 = sine)
+// at different rates (1s and 2s period), and applies random pitch bend
+// (+-2 semitones, lasting up to 0.5s) triggered every 1s, on notes played by the user.
+
+// 1. Release synth 0 voices first
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 2 oscillators per voice for 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 2});
+
+// 3. Configure the synth voices (Osc 0 = Saw, Osc 1 = Sine)
+// By passing synth: 0 and osc: 0/1, AMY applies this configuration relative 
+// to the allocated oscillators of all active voices in synth 0.
+amy_send({synth: 0, osc: 0, wave: AMY.SAW_DOWN, amp: {const: 1.0}});
+amy_send({synth: 0, osc: 1, wave: AMY.SINE, amp: {const: 1.0}});
+
+// Track active timers for clean resets
+window.activeIntervals = window.activeIntervals || [];
+window.activeTimeouts = window.activeTimeouts || [];
+
+function startInterval(fn, ms) {
+  const id = setInterval(fn, ms);
+  window.activeIntervals.push(id);
+  return id;
+}
+
+function startTimeout(fn, ms) {
+  const id = setTimeout(fn, ms);
+  window.activeTimeouts.push(id);
+  return id;
+}
+
+let pitchBendSemitones = 0;
+
+// LFO 3 (Pitch Bend): Trigger every 1s
+// Random bend of +-2 semitones, lasting for a random duration up to 0.5s
+startInterval(() => {
+  const targetBend = (Math.random() * 4 - 2); // +- 2 semitones
+  const duration = Math.random() * 500; // up to 0.5s
+  
+  pitchBendSemitones = targetBend;
+  
+  startTimeout(() => {
+    pitchBendSemitones = 0;
+  }, duration);
+}, 1000);
+
+// Real-time LFO 1 & 2 Loop (Volume modulation): runs every 30ms
+startInterval(() => {
+  const now = Date.now();
+  
+  // LFO 1: Saw volume (1s period = 1000ms)
+  const volSaw = 0.5 + 0.45 * Math.sin(2 * Math.PI * now / 1000);
+  
+  // LFO 2: Sine volume (2s period = 2000ms)
+  const volSine = 0.5 + 0.45 * Math.sin(2 * Math.PI * now / 2000);
+  
+  // Build a single batched wire command to update the synth voice oscillators
+  let batch = "";
+  batch += amy_message({synth: 0, osc: 0, amp: {const: volSaw}});
+  batch += amy_message({synth: 0, osc: 1, amp: {const: volSine}});
+  
+  // Apply global pitch bend to synth 0 (unit is octaves, so semitones / 12.0)
+  batch += amy_message({synth: 0, pitch_bend: pitchBendSemitones / 12.0});
+  
+  remote.setParam('synth:amy_wire', batch);
+}, 30);
+
+log("JS LFO Modulator active! Play on Move pads or route MIDI to hear the JS-driven LFOs.", "info");`
         }
     ];
 
