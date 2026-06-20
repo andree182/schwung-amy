@@ -149,7 +149,7 @@ typedef struct amy_instance_t {
     preset_count = 258;
     octave_transpose = 0;
     aftertouch_mode = 0;
-    output_gain = 0.5f;
+    output_gain = 1.0f;
     strncpy(preset_name, AMY_PRESET_NAMES[0], sizeof(preset_name) - 1);
     ui_hierarchy_json = nullptr;
     chain_params_json = nullptr;
@@ -158,7 +158,7 @@ typedef struct amy_instance_t {
     filter_freq = 8000.0f;
     resonance = 0.707f;
     filter_type = 0;
-    volume = 0.5f;
+    volume = 1.0f;
     reverb_level = 0.0f;
     chorus_level = 0.0f;
     echo_level = 0.0f;
