@@ -903,6 +903,147 @@ remote.setParam('synth:aftertouch_mode', 1);
 amy_send({synth: 0, num_voices: 16, patch: 4});
 
 log("Poly aftertouch enabled (Filter Cutoff)! Play pads on Move and apply pressure.", "info");`
+        },
+        {
+            title: "Filter Bass",
+            code: `// Classic Analog Filter Bass Sweep
+// Lowpass filter envelope sweep on a raw sawtooth wave.
+// Uses a 1-oscillator-per-voice allocation under synth 0.
+
+// 1. Release synth 0 voices first to allow clean reallocation
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 1 oscillator per voice for 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 1});
+
+// 3. Configure the patch:
+for (let v = 0; v < 16; v++) {
+  amy_send({
+    osc: v,
+    wave: AMY.SAW_DOWN,
+    filter_type: AMY.FILTER_LPF,
+    filter_freq: "100,0,0,5.0", // Base of 100Hz + 5 octaves envelope sweep
+    resonance: 5.0,
+    bp0: "0,1.0,1000,0.0,100,0.0" // Attack to decay to release
+  });
+}
+
+log("Filter Bass initialized. Play low notes for analog sweeps!", "info");`
+        },
+        {
+            title: "Analog Kick",
+            code: `// Analog Kick (Bass Drum)
+// Uses a 0.25Hz sine wave (going down) to modulate the frequency of a sine wave carrier.
+
+// 1. Release synth 0 voices first
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 2 oscillators per voice for 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 2});
+
+// 3. Configure the patch:
+for (let v = 0; v < 16; v++) {
+  const base = v * 2;
+  // Modulator: slow sine LFO at 0.25Hz, starting at peak/downward phase (0.5)
+  amy_send({osc: base + 1, wave: AMY.SINE, freq: 0.25, amp: {const: 0.5}, phase: 0.5});
+  // Carrier: sine wave, modulated by modulator (base + 1) on frequency parameter
+  amy_send({
+    osc: base,
+    wave: AMY.SINE,
+    bp0: "0,1.0,500,0.0,0,0.0",
+    freq: "150,1,0,0,0,1", // Coef 5 (mod) links LFO to pitch
+    mod_source: base + 1
+  });
+}
+
+log("Analog Kick initialized. Play low notes/pads to trigger kick!", "info");`
+        },
+        {
+            title: "Analog Snare",
+            code: `// Noise Snare Drum
+// White noise with a fast decay amplitude envelope.
+
+// 1. Release synth 0 voices first
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 1 oscillator per voice
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 1});
+
+// 3. Configure the patch:
+for (let v = 0; v < 16; v++) {
+  amy_send({
+    osc: v,
+    wave: AMY.NOISE,
+    bp0: "0,1.0,200,0.0,0,0.0"
+  });
+}
+
+log("Analog Snare initialized! Play notes/pads to trigger snare hits.", "info");`
+        },
+        {
+            title: "Closed Hat",
+            code: `// Closed Hi-Hat
+// High-pass filtered noise with a very short decay envelope.
+
+// 1. Release synth 0 voices
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 1 oscillator per voice
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 1});
+
+// 3. Configure high-pass filter and envelope:
+for (let v = 0; v < 16; v++) {
+  amy_send({
+    osc: v,
+    wave: AMY.NOISE,
+    filter_type: AMY.FILTER_HPF,
+    filter_freq: "6000,0,0,0,0", // Constant 6kHz high-pass
+    bp0: "5,1.0,30,0.0,0,0.0" // Fast attack (5ms), rapid decay (30ms)
+  });
+}
+
+log("Closed Hi-Hat initialized! Play high notes/pads to trigger.", "info");`
+        },
+        {
+            title: "Poly FM Bell",
+            code: `// Polyphonic 2-Operator FM Bell
+// Uses ALGO (algorithm 1) with 3 oscillators per voice:
+// Osc 2 is modulator, Osc 1 is carrier, Osc 0 is ALGO
+
+// 1. Release synth 0 voices first
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 3 oscillators per voice for 16 voices
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 3});
+
+// 3. Configure the FM operators:
+for (let v = 0; v < 16; v++) {
+  const base = v * 3;
+  // Modulator (op 2) - frequency ratio 0.5, envelope BP0 controlling amp
+  amy_send({
+    osc: base + 2, 
+    wave: AMY.SINE, 
+    ratio: 0.5, 
+    amp: {const: 1.0, vel: 0, eg0: 3.5}, 
+    bp0: '0,0.0,3000,1.0,0,0.0'
+  });
+  // Carrier (op 1) - frequency ratio 1.0, amp envelope bypass (const 1.0)
+  amy_send({
+    osc: base + 1, 
+    wave: AMY.SINE, 
+    ratio: 1.0, 
+    amp: {const: 1.0, vel: 0, eg0: 0.0}
+  });
+  // ALGO (op 0) - algorithm 1, links carrier (base+1) and modulator (base+2)
+  amy_send({
+    osc: base, 
+    wave: AMY.ALGO, 
+    algorithm: 1, 
+    algo_source: \`,,,,\${base+2},\${base+1}\`
+  });
+}
+
+log("Poly FM Bell initialized. Play polyphonic bell chords!", "info");`
         }
     ];
 
