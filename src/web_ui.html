@@ -627,9 +627,25 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
         indentWithTabs: false
     });
 
+    // Track active intervals and timeouts to prevent leaks
+    window.activeIntervals = [];
+    window.activeTimeouts = [];
+
+    function clearPendingScripts() {
+        if (window.activeIntervals) {
+            window.activeIntervals.forEach(clearInterval);
+            window.activeIntervals = [];
+        }
+        if (window.activeTimeouts) {
+            window.activeTimeouts.forEach(clearTimeout);
+            window.activeTimeouts = [];
+        }
+    }
+
     // Run REPL script
     function runCode() {
         log('Executing script block...', 'info');
+        clearPendingScripts();
         const code = editor.getValue();
         try {
             // Reset times by sending RESET_TIMEBASE command to start delta streams from 0
@@ -646,6 +662,7 @@ amy_send({osc: 2, wave: AMY.SINE, freq: 392.00, vel: 0.6}) // G4
     // Reset AMY synth engine completely
     function resetAMY() {
         log('Resetting AMY synthesiser engine...', 'info');
+        clearPendingScripts();
         remote.setParam('synth:aftertouch_mode', 0); // Reset aftertouch mode
         remote.setParam('synth:amy_wire', 'S' + (4096 + 8192) + 'Z'); // Reset sequencer + all oscs
         remote.setParam('synth:amy_wire', 'S262144Z'); // Reset synths/instruments
@@ -705,6 +722,104 @@ amy_send({osc: 2, wave: AMY.SINE, ratio: 0.5, amp: {const: 1.0, vel: 0, eg0: 3.5
 amy_send({osc: 1, wave: AMY.SINE, ratio: 1.0, amp: {const: 1.0, vel: 0, eg0: 0}});
 amy_send({osc: 0, wave: AMY.ALGO, algorithm: 1, algo_source: ',,,,2,1'});
 amy_send({osc: 0, note: 50, vel: 0.85});`
+        },
+        {
+            title: "PWM LFO Pad",
+            code: `// Thick PWM Pad (Pulse Width Modulation via LFO)
+// Modulates a PULSE wave's duty cycle using a slow SINE LFO.
+
+// 1. Release synth 0 voices first to allow proper consecutive oscillator allocation
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 2 oscillators per voice for all 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 2});
+
+// 3. Configure the patch:
+// Osc 1 (Modulator) is a slow SINE LFO (0.5Hz, max amplitude)
+// Osc 0 (Carrier) is a PULSE wave modulated by Osc 1 on the 'duty' parameter
+for (let v = 0; v < 16; v++) {
+  const base = v * 2;
+  amy_send({osc: base + 1, wave: AMY.SINE, freq: 0.5, amp: {const: 1.0}});
+  amy_send({osc: base, wave: AMY.PULSE, duty: {const: 0.5, mod: 0.4}, mod_source: base + 1});
+}
+
+log("PWM LFO Pad initialized! Play notes to hear the pulsing width modulation.", "info");`
+        },
+        {
+            title: "KS Pluck",
+            code: `// Karplus-Strong Physical Modeling Pluck
+// Synthesizes plucked string sounds using a feedback delay line.
+
+// 1. Release synth 0 voices first to force reallocation
+amy_send({synth: 0, num_voices: 0});
+
+// 2. Allocate 1 oscillator per voice for 16 voices under synth 0
+amy_send({synth: 0, num_voices: 16, oscs_per_voice: 1});
+
+// 3. Configure the voices to use Karplus-Strong synthesis
+for (let v = 0; v < 16; v++) {
+  const base = v * 1;
+  // feedback close to 1.0 (e.g. 0.96) controls string decay/sustain length
+  amy_send({
+    osc: base, 
+    wave: AMY.KS, 
+    feedback: 0.96,
+    bp0: '0,1.0,1000,0.0,0,0' // Envelope gates amplitude of the KS oscillator
+  });
+}
+
+log("Karplus-Strong Pluck initialized! Play notes to hear the physical string emulation.", "info");`
+        },
+        {
+            title: "JS Mod & Arp",
+            code: `// JavaScript Parameter Modulator & Arpeggiator
+// Plays a sequenced chord arpeggio in JS while continuously sweeping 
+// the filter cutoff parameter in real-time.
+
+// 1. Load Juno Strings (Preset 64) for a rich, warm sound
+amy_send({synth: 0, num_voices: 16, patch: 64});
+
+// Helper to register intervals and timeouts so they clean up cleanly on reset
+window.activeIntervals = window.activeIntervals || [];
+window.activeTimeouts = window.activeTimeouts || [];
+
+function startInterval(fn, ms) {
+  const id = setInterval(fn, ms);
+  window.activeIntervals.push(id);
+  return id;
+}
+
+function startTimeout(fn, ms) {
+  const id = setTimeout(fn, ms);
+  window.activeTimeouts.push(id);
+  return id;
+}
+
+let step = 0;
+const notes = [48, 55, 60, 62, 67, 72, 79]; // C-G-C-D-G-C-G arpeggio
+let filterPhase = 0;
+
+// Trigger notes every 250ms
+startInterval(() => {
+  const note = notes[step % notes.length];
+  amy_send({synth: 0, note: note, vel: 0.7});
+  
+  // Note off after 200ms
+  startTimeout(() => {
+    amy_send({synth: 0, note: note, vel: 0});
+  }, 200);
+  
+  step++;
+}, 250);
+
+// Sweep filter cutoff smoothly every 30ms (range: 200Hz - 4000Hz)
+startInterval(() => {
+  filterPhase += 0.04;
+  const cutoff = 2100 + 1900 * Math.sin(filterPhase);
+  remote.setParam('synth:cutoff', cutoff);
+}, 30);
+
+log("JS Arpeggiator and Cutoff Sweep running! Press Reset Engine or run other code to stop.", "info");`
         },
         {
             title: "Drum Sequencer",
