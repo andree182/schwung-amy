@@ -2,7 +2,7 @@
   "id": "amy",
   "name": "Amy",
   "abbrev": "AMY",
-  "version": "1.0",
+  "version": "1.1",
   "description": "AMY Music Synthesizer Engine",
   "author": "DAn Ellis and Brian Whitman (port: andree182)",
   "license": "MIT",
